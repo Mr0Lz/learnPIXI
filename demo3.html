@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+	
+</body>
+<script src="https://pixijs.download/v4.5.5/pixi.js"></script>
+<script>
+		let type = 'WebGL'
+		if(!PIXI.utils.isWebGLSupported()){
+			type = 'canvas'
+		}
+
+//Aliases  别名
+		let Application = PIXI.Application,
+		    loader = PIXI.loader,
+		    Resources = PIXI.loader.resources,
+		    Sprite = PIXI.Sprite,
+		    Container = PIXI.Container,
+		    Text = PIXI.Text,
+		    TextStyle = PIXI.TextStyle,
+		    TextureCache = PIXI.utils.TextureCache,
+		    Graphics = PIXI.Graphics,
+		    ParticleContainer = PIXI.particles.ParticleContainer,
+		    Rectangle = PIXI.Rectangle;
+
+		let app = new  PIXI.Application({width:521,height:521,transparent:false});
+			document.body.appendChild(app.view);
+
+//加载资源
+		loader.add(['./images/treasureHunter.json']).load(setup);		
+
+		let state // game state 
+		,gameScene //游戏主要部分的精灵容器
+		,gameOverScene //游戏结束后的精灵容器
+		,id//精灵集合
+		,dungeon//地牢背景
+		,door//exit
+		,explorer//探险者
+		,treasure //宝藏
+		,healthBar //血条
+		,explorerHit //碰到怪
+
+		//泡泡怪的配置参数
+		let numberOfBlobs = 6,
+		    spacing = 48,
+		    xOffset = 150,
+		    speed = 2,
+		    direction = 1;
+		    blobs = [];
+
+		function setup(){
+			//资源加载完执行 初始化游戏
+			
+			gameScene = new Container();
+			app.stage.addChild(gameScene);
+
+			gameOverScene = new Container(); 
+			app.stage.addChild(gameOverScene);
+			gameOverScene.visible = false;
+
+			id = Resources['./images/treasureHunter.json'].textures;
+
+			dungeon = new Sprite(id['dungeon.png']);//地牢
+			dungeon.width = app.view.width ;
+			dungeon.height = app.view.width ;
+			gameScene.addChild(dungeon);
+
+			door = new Sprite(id['door.png']);//exit
+			door.position.set(32, 0);
+			gameScene.addChild(door);
+
+
+			explorer = new Sprite(id["explorer.png"]);
+			explorer.x = 68;
+			explorer.y = gameScene.height / 2 - explorer.height / 2;
+			explorer.vx = 0;
+			explorer.vy = 0;
+			gameScene.addChild(explorer);
+
+			//Treasure
+			treasure = new Sprite(id["treasure.png"]);
+			treasure.x = gameScene.width - treasure.width - 48;
+			treasure.y = gameScene.height / 2 - treasure.height / 2;
+			gameScene.addChild(treasure);
+
+			//制造泡泡怪
+			for (var i = 0; i < numberOfBlobs; i++) {
+				let blob = new Sprite(id['blob.png']);
+				blob.x = spacing * i + xOffset;
+				blob.y = randomInt(0, app.stage.height - blob.height);
+				blob.vy = speed * direction;
+				direction *= -1;
+
+				blobs.push(blob);
+				gameScene.addChild(blob);
+			}
+
+			//制作血条
+			healthBar = new PIXI.DisplayObjectContainer();//血条容器
+			healthBar.position.set(app.stage.width - 170, 4)
+			
+			//Create the black background rectangle
+			let innerBar = new PIXI.Graphics();
+			innerBar.beginFill(0x000000);
+			innerBar.drawRect(0, 0, 128, 8);
+			innerBar.endFill();
+			healthBar.addChild(innerBar);
+
+			//Create the front red rectangle
+			let outerBar = new PIXI.Graphics();
+			outerBar.beginFill(0xFF3300);
+			outerBar.drawRect(0, 0, 128, 8);
+			outerBar.endFill();
+			healthBar.addChild(outerBar);
+
+			healthBar.outer = outerBar;
+
+			//healthBar.outer.width = 30;
+			app.stage.addChild(healthBar);
+
+			//游戏结果文字
+			let style = new TextStyle({
+				fontFamily: "Futura",
+				fontSize: 64,
+				fill: "white"
+			});
+
+			message = new Text("The End!", style);
+			message.x = 120;
+			message.y = app.stage.height / 2 - 32;
+			gameOverScene.addChild(message);
+
+			// 键盘事件
+
+		  //Capture the keyboard arrow keys
+		  let left = keyboard(37),
+		      up = keyboard(38),
+		      right = keyboard(39),
+		      down = keyboard(40);
+
+		      left.press = () => {
+		      	explorer.vx = -5;
+				explorer.vy = 0;
+		      };
+
+		      left.release = () => {
+		      	if( !right.isDown && explorer.vy === 0){
+		      		explorer.vx = 0;
+		      	}
+		      };
+
+		      right.press = () => {
+		      	explorer.vx = +5;
+				explorer.vy = 0;
+		      };
+
+		      right.release = () => {
+		      	if( !left.isDown && explorer.vy === 0){
+		      		explorer.vx = 0;
+		      	}
+		      };
+
+		      up.press = () => {
+		      	explorer.vx = 0;
+				explorer.vy = -5;
+		      };
+
+		      up.release = () => {
+		      	if( !down.isDown && explorer.vx === 0){
+		      		explorer.vy = 0;
+		      	}
+		      };
+
+		      down.press = () => {
+		      	explorer.vx = 0;
+				explorer.vy = 5;
+		      };
+
+		      down.release = () => {
+		      	if( !up.isDown && explorer.vx === 0){
+		      		explorer.vy = 0;
+		      	}
+		      };
+
+
+
+
+			state = play; //set the game state to `play`
+
+			app.ticker.add(delta => gameLoop(delta) ); //start game loop
+			
+		}
+
+		function gameLoop(delta){
+			//循环
+			state(delta);
+		}
+
+		function play(delta){
+			//游戏逻辑
+			
+			explorer.x += explorer.vx;
+  			explorer.y += explorer.vy
+			contain(explorer, {x: 28, y: 10, width: app.stage.width - 32, height:  app.stage.height - 32});//explorer 边界处理
+
+			//怪物边界处理
+			blobs.forEach(function(blob){
+				//  blob 移动
+				blob.y += blob.vy;
+
+				//边界处理
+				let blobHitsWall = contain(blob,{x: 28, y: 10, width: app.stage.width - 32, height:  app.stage.height - 32});
+
+				if(blobHitsWall == 'top' || blobHitsWall == 'bottom'  ){//方向处理
+					blob.vy *= -1;
+				}
+
+				if(hitTestRectangle(explorer, blob)) {
+				    explorerHit = true;
+				  }
+
+			});
+
+				console.log(explorerHit);
+
+			if(explorerHit) {
+
+				  //Make the explorer semi-transparent
+				  explorer.alpha = 0.5;
+
+				  //Reduce the width of the health bar's inner rectangle by 1 pixel
+				  healthBar.outer.width -= 1;
+				  
+
+			} else {
+
+				  //Make the explorer fully opaque (non-transparent) if it hasn't been hit
+				  explorer.alpha = 1;
+			}
+
+
+			if (hitTestRectangle(explorer, treasure)) {
+			  treasure.x = explorer.x + 8;
+			  treasure.y = explorer.y + 8;
+			}
+				
+			//宝箱只需碰到出口就赢了
+			if (hitTestRectangle(treasure, door)) {
+				  state = end;
+				  message.text = "You won!";
+				}
+
+			if (healthBar.outer.width < 0) {
+			  state = end;
+			  message.text = "You lost!";
+			  healthBar.outer.width =  0;
+			}
+		}
+
+		function end(){
+			// game end
+			gameScene.visible = false;
+			gameOverScene.visible = true;
+		}
+
+		//The `randomInt` helper function
+		function randomInt(min, max) {
+		  return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+
+		//边界
+		function contain(sprite, container) {
+
+		  let collision = undefined;
+
+		  //Left
+		  if (sprite.x < container.x) {
+		    sprite.x = container.x;
+		    collision = "left";
+		  }
+
+		  //Top
+		  if (sprite.y < container.y) {
+		    sprite.y = container.y;
+		    collision = "top";
+		  }
+
+		  //Right
+		  if (sprite.x + sprite.width > container.width) {
+		    sprite.x = container.width - sprite.width;
+		    collision = "right";
+		  }
+
+		  //Bottom
+		  if (sprite.y + sprite.height > container.height) {
+		    sprite.y = container.height - sprite.height;
+		    collision = "bottom";
+		  }
+
+		  //Return the `collision` value
+		  return collision;
+		}
+
+
+
+		//键盘移动
+		function keyboard(keyCode) {
+		  let key = {};
+		  key.code = keyCode;
+		  key.isDown = false;
+		  key.isUp = true;
+		  key.press = undefined;
+		  key.release = undefined;
+		  //The `downHandler`
+		  key.downHandler = event => {
+		    if (event.keyCode === key.code) {
+		      if (key.isUp && key.press) key.press();
+		      key.isDown = true;
+		      key.isUp = false;
+		    }
+		    event.preventDefault();
+		  };
+
+		  //The `upHandler`
+		  key.upHandler = event => {
+		    if (event.keyCode === key.code) {
+		      if (key.isDown && key.release) key.release();
+		      key.isDown = false;
+		      key.isUp = true;
+		    }
+		    event.preventDefault();
+		  };
+
+		  //Attach event listeners
+		  window.addEventListener(
+		    "keydown", key.downHandler.bind(key), false
+		  );
+		  window.addEventListener(
+		    "keyup", key.upHandler.bind(key), false
+		  );
+		  return key;
+		}
+
+
+//检测碰撞 函数
+function hitTestRectangle(r1,r2){
+
+
+  //Define the variables we'll need to calculate
+  let hit, combinedHalfWidths, combinedHalfHeights, vx, vy;
+
+  //hit will determine whether there's a collision
+  hit = false;
+
+  //Find the center points of each sprite
+  r1.centerX = r1.x + r1.width / 2;
+  r1.centerY = r1.y + r1.height / 2;
+  r2.centerX = r2.x + r2.width / 2;
+  r2.centerY = r2.y + r2.height / 2;
+
+  //Find the half-widths and half-heights of each sprite
+  r1.halfWidth = r1.width / 2;
+  r1.halfHeight = r1.height / 2;
+  r2.halfWidth = r2.width / 2;
+  r2.halfHeight = r2.height / 2;
+
+  //Calculate the distance vector between the sprites
+  vx = r1.centerX - r2.centerX;
+  vy = r1.centerY - r2.centerY;
+
+  //Figure out the combined half-widths and half-heights
+  combinedHalfWidths = r1.halfWidth + r2.halfWidth;
+  combinedHalfHeights = r1.halfHeight + r2.halfHeight;
+
+  //Check for a collision on the x axis
+  if (Math.abs(vx) < combinedHalfWidths) {
+
+    //A collision might be occuring. Check for a collision on the y axis
+    if (Math.abs(vy) < combinedHalfHeights) {
+
+      //There's definitely a collision happening
+      hit = true;
+    } else {
+
+      //There's no collision on the y axis
+      hit = false;
+    }
+  } else {
+
+    //There's no collision on the x axis
+    hit = false;
+  }
+
+  //`hit` will be either `true` or `false`
+  return hit;
+
+}
+
+</script>

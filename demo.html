@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+	
+</body>
+<script src="https://pixijs.download/v4.5.5/pixi.js"></script>
+	<script>
+		let type = 'WebGL'
+		if(!PIXI.utils.isWebGLSupported()){
+			type = 'canvas'
+		}
+
+//Aliases  别名
+		let Application = PIXI.Application,
+		    loader = PIXI.loader,
+		    Resources = PIXI.loader.resources,
+		    Sprite = PIXI.Sprite;
+		    TextureCache = PIXI.utils.TextureCache
+		    Rectangle = PIXI.Rectangle;
+
+		PIXI.utils.sayHello(type);
+		//var r = new PIXI.Sprite.fromImage('SOLOVE_files/clouds.jpg');
+		//
+		let app = new  PIXI.Application({width:256,height:256,transparent:false});
+		document.body.appendChild(app.view);
+		app.renderer.resize(512, 512);
+		PIXI.loader
+			.add(['./images/cat.png','./images/tileset.png','./images/treasureHunter.json'])//.add("catImage", "images/cat.png") //给这个猫的图片重命名为catImage,这种操作在loader.resources中创建了一个叫做catImage的对象。 
+							//let cat = new PIXI.Sprite(PIXI.loader.resources.catImage.texture); 不建议
+			.load(setup)
+			.on('progress',loadProgressHandler);//监听加载进度事件
+
+
+
+			function loadProgressHandler(loader, resource){
+				console.log('loading'+resource.url);
+				console.log('progress'+loader.progress+'%');
+			}
+
+			function setup(){
+				console.log("All files loaded");
+				let cat = new PIXI.Sprite(PIXI.loader.resources["./images/cat.png"].texture);
+					cat.x= 96; cat.y = 96;
+					cat.width = 80 ; cat.height = 120;
+
+					//css3 的 scale 2种方法
+					cat.scale.x = 0.5;cat.scale.y = 0.5;
+					cat.scale.set(0.5, 0.5);
+
+
+					cat.rotation = 0.5;//设置锚点  类是与css3 的  transform-origin: center;2种方法   定位相关 改变了精灵纹理的图像原点，用0到1的数据来填充
+					cat.anchor.x = 0.5;cat.anchor.y = 0.5; 
+					cat.anchor.set(0.5,0.5);//设置原点  类是与css3 的  transform-origin: center;2种方法   则改变了精灵的原点，用像素的值来填充。
+				cat.pivot.set(32, 32);//改变了精灵的pivot属性，你也就改变它的原点位置
+
+				app.stage.addChild(cat);
+
+
+				//cat.visible = false // 隐藏精灵
+				//app.stage.removeChild(cat); //删除精灵
+				
+//雪碧图创建
+				
+				var texture  = TextureCache['./images/tileset.png'];
+
+				let rectangle = new Rectangle(32*3, 32*2, 32, 32);//通用的Rectangle对象 (PIXI.Rectangle)定义x 和y轴坐标位置，后两个参数定义width 和 height
+
+				texture.frame = rectangle;
+
+				 //Create the sprite from the texture
+  				let rocket = new Sprite(texture);
+
+  				//Position the rocket sprite on the canvas
+				  rocket.x = 20;
+				  rocket.y = 2;
+
+				  //Add the rocket to the stage
+				  app.stage.addChild(rocket);
+
+				  //Render the stage   
+				  app.renderer.render(app.stage);
+
+
+
+
+// 从纹理贴图集 创建
+				  var dungeon,explorer,treasure,id,door;
+
+				  //1.从TextureCache创建
+				  var dungeonTexture = TextureCache['dungeon.png'];
+				  dungeon = new Sprite(dungeonTexture);
+				  app.stage.addChild(dungeon);
+
+				  //2.从PIXI.loader.resources 创建
+				  explorer = new Sprite(Resources['./images/treasureHunter.json'].textures['explorer.png']);
+				  app.stage.addChild(explorer);
+				  explorer.x = 68;
+
+				  //Center the explorer vertically
+				  explorer.y = app.stage.height / 2 - explorer.height / 2;
+
+
+
+				  //3.给纹理贴图集的textures对象创建一个叫做id的别名	 PIXI.loader.resources["images/treasureHunter.json"].textures;
+				  id = Resources['./images/treasureHunter.json'].textures;
+				  treasure = new Sprite(id['treasure.png']);
+
+				  //Position the treasure next to the right edge of the canvas
+				  treasure.x = app.stage.width - treasure.width - 48;
+				  treasure.y = app.stage.height / 2 - treasure.height / 2;
+				  app.stage.addChild(treasure);
+
+				  //exit door
+				  door = new Sprite(id['door.png']);
+				  door.position.set(32,0);
+				  app.stage.addChild(door);
+
+
+				    //Make the blobs
+				  let numberOfBlobs = 6,
+				      spacing = 48,
+				      xOffset = 150;
+
+				  //Make as many blobs as there are `numberOfBlobs`
+				  for (let i = 0; i < numberOfBlobs; i++) {
+
+				    //Make a blob
+				    let blob = new Sprite(id["blob.png"]);
+
+				    //Space each blob horizontally according to the `spacing` value.
+				    //`xOffset` determines the point from the left of the screen
+				    //at which the first blob should be added.
+				    let x = spacing * i + xOffset;
+
+				    //Give the blob a random y position
+				    //(`randomInt` is a custom function - see below)
+				    let y = randomInt(0, app.stage.height - blob.height);
+
+				    //Set the blob's position
+				    blob.x = x;
+				    blob.y = y;
+
+				    //Add the blob sprite to the stage
+				    app.stage.addChild(blob);
+				  }
+
+//Start the game loop by adding the `gameLoop` function to
+  //Pixi's `ticker` and providing it with a `delta` argument.
+  
+  					//vx和 vy去控制精灵的运动速度
+  					explorer.vx = 0;
+  					explorer.vy= 0;
+
+				  	app.ticker.add(delta => gameLoop(delta));//delta的值代表帧的部分的延迟
+					//移动
+					function gameLoop(delta){
+						//explorer.x += 1 + delta;
+						explorer.vy = 2;
+						explorer.vx = 2;
+						explorer.y += explorer.vy;
+						explorer.x += explorer.vx;
+						
+					}
+
+
+			}
+
+
+
+
+
+
+
+//The `randomInt` helper function
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+
+	</script>
+</html>
